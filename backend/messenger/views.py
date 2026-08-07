@@ -1,10 +1,11 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.contrib.auth import authenticate
-from rest_framework.authtoken.models import Token
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import status, viewsets
 from django.contrib.auth.models import User
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .serializers import (
     RegisterSerializer,
@@ -29,8 +30,6 @@ class RegisterAPI(APIView):
             )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
 class LoginAPI(APIView):
     permission_classes = [AllowAny]
 
@@ -38,27 +37,33 @@ class LoginAPI(APIView):
         username = request.data.get("username")
         password = request.data.get("password")
 
-        user = authenticate(username=username, password=password)
+        user = authenticate(
+            username=username,
+            password=password
+        )
 
         if user is None:
             return Response(
-                {"error": "Invalid username or password"},
+                {
+                    "error": "Invalid username or password"
+                },
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        token, created = Token.objects.get_or_create(user=user)
+        refresh = RefreshToken.for_user(user)
 
         return Response(
             {
                 "message": "Login successful",
-                "token": token.key,
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
                 "username": user.username,
                 "user_id": user.id,
             },
             status=status.HTTP_200_OK,
         )
 
-
+    
 class UserListAPI(APIView):
     permission_classes = [IsAuthenticated]
 

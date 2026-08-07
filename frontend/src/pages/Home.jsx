@@ -6,34 +6,69 @@ function Home() {
   const [message, setMessage] = useState("");
 
   const username = localStorage.getItem("username");
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("access");
  const userId = Number(localStorage.getItem("user_id"));
 console.log("Current User ID:", userId);
 
   const [messages, setMessages] = useState([]);
   const [users, setUsers] = useState([]);
   const [chatId, setChatId] = useState(null);
-
+  const [socket, setSocket] = useState(null);
   // NEW
   const [selectedUser, setSelectedUser] = useState(null);
-  
+useEffect(() => {
+    if (!token) return;
 
-  useEffect(() => {
-    axios
-      .get("http://127.0.0.1:8000/api/auth/users/", {
-        headers: {
-          Authorization: `Token ${token}`,
-        },
-      })
-      .then((res) => {
+    axios.get(
+        "http://127.0.0.1:8000/api/auth/users/",
+        {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        }
+    ).then((res)=>{
         setUsers(res.data);
-      })
-      .catch((err) => {
-        console.log(err);
-      });
-  }, []);
+    });
 
-  console.log(localStorage.getItem("token"));
+}, [token]);
+useEffect(() => {
+    if (!chatId) return;
+
+    const ws = new WebSocket(
+        `ws://127.0.0.1:8000/ws/chat/${chatId}/?user_id=${userId}`
+    );
+
+    ws.onopen = () => {
+        console.log("✅ WebSocket Connected");
+        setSocket(ws);
+    };
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        setMessages((prev) => [
+            ...prev,
+            {
+                message: data.message,
+                sender: data.sender,
+            },
+        ]);
+    };
+
+    ws.onerror = (e) => {
+        console.log("WebSocket Error", e);
+    };
+
+    ws.onclose = (e) => {
+        console.log("Closed", e.code, e.reason);
+    };
+
+    return () => {
+        ws.close();
+    };
+}, [chatId, userId]);
+
+  console.log(localStorage.getItem("access"));
 const createOrGetChat = async (receiverId) => {
     try {
         const res = await axios.post(
@@ -43,15 +78,15 @@ const createOrGetChat = async (receiverId) => {
             },
             {
                 headers: {
-                    Authorization: `Token ${token}`,
+                   Authorization: `Bearer ${token}`
                 },
             }
         );
 
         console.log("Chat API Response:", res.data);
 
-       setChatId(res.data.id);
-loadMessages(res.data.id);
+    setChatId(res.data.id);
+
 
     } catch (err) {
         console.log("Status:", err.response?.status);
@@ -60,35 +95,31 @@ loadMessages(res.data.id);
     }
 };
 
-  const sendMessage = async () => {
-    console.log("Send button clicked");
+const sendMessage = () => {
+    console.log("Button clicked");
 
-    if (message === "") return;
-
-    try {
-        console.log("Chat ID:", chatId);
-        console.log("Message:", message);
-
-        await axios.post(
-            "http://127.0.0.1:8000/api/auth/messages/",
-            {
-                chat: chatId,
-                message: message,
-            },
-            {
-                headers: {
-                    Authorization: `Token ${token}`,
-                },
-            }
-        );
-
-        setMessage("");
-        loadMessages(chatId);
-
-    } catch (err) {
-        console.log(err.response);
-        console.log(err);
+    if (!socket) {
+        console.log("Socket is null");
+        return;
     }
+
+    console.log("Socket state:", socket.readyState);
+
+    if (socket.readyState !== WebSocket.OPEN) {
+        console.log("Socket is not open");
+        return;
+    }
+
+    console.log("Sending:", message);
+    console.log("Socket:", socket);
+    console.log("Ready State:", socket?.readyState);
+    socket.send(
+        JSON.stringify({
+            message: message
+        })
+    );
+
+    setMessage("");
 };
 
 const loadMessages = async (chatId) => {
@@ -99,7 +130,7 @@ const loadMessages = async (chatId) => {
             `http://127.0.0.1:8000/api/auth/messages/?chat=${chatId}`,
             {
                 headers:{
-                    Authorization:`Token ${token}`
+                   Authorization: `Bearer ${token}`
                 }
             }
         );

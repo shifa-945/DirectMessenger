@@ -27,85 +27,61 @@ function Login() {
 
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    const { username, password } = formData;
+  const { username, password } = formData;
+
+  if (!username || !password) {
+    setError("Please enter your username and password.");
+    return;
+  }
+
+  try {
+
+    setLoading(true);
+
+    const response = await axios.post(
+      "http://127.0.0.1:8000/api/auth/login/",
+      {
+        username,
+        password,
+      }
+    );
+
+localStorage.setItem("access", response.data.access);
+localStorage.setItem("refresh", response.data.refresh);
+localStorage.setItem("username", response.data.username);
+localStorage.setItem("user_id", response.data.user_id);
 
 
-    if (!username || !password) {
-      setError("Please enter your username and password.");
-      return;
-    }
+
+    // Redirect
+    navigate("/home");
 
 
-    try {
+  } catch (error) {
 
-      setLoading(true);
+    if (error.response) {
 
-
-      const response = await axios.post(
-        "http://127.0.0.1:8000/api/auth/login/",
-        {
-          username,
-          password,
-        }
+      setError(
+        error.response.data.detail ||
+        "Invalid username or password."
       );
 
+    } else {
 
-      
-      console.log("API Response:", response.data);
-console.log("Token:", response.data.token);
-console.log("Username:", response.data.username);
-console.log("User ID:", response.data.user_id);
-
-
-     // Save token
-localStorage.setItem(
-    "token",
-    response.data.token
-);
-
-// Save username
-localStorage.setItem(
-    "username",
-    response.data.username
-);
-
-// Save user id  <-- ADD THIS
-localStorage.setItem(
-    "user_id",
-    response.data.user_id
-);
-
-      // Redirect to dashboard
-      navigate("/home");
-
-
-    } catch (error) {
-
-      if (error.response) {
-
-        setError(
-          error.response.data.error || 
-          "Invalid username or password."
-        );
-
-      } else {
-
-        setError(
-          "Server error. Please try again."
-        );
-
-      }
-
-    } finally {
-
-      setLoading(false);
+      setError(
+        "Server error. Please try again."
+      );
 
     }
 
-  };
+  } finally {
 
+    setLoading(false);
+
+  }
+};
 
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4">
