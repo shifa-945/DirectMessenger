@@ -30,15 +30,19 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 
-
-
 class UserListSerializer(serializers.ModelSerializer):
 
     unread_count = serializers.SerializerMethodField()
+    last_message = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["id", "username", "unread_count"]
+        fields = [
+            "id",
+            "username",
+            "unread_count",
+            "last_message",
+        ]
 
     def get_unread_count(self, obj):
         request = self.context["request"]
@@ -53,6 +57,31 @@ class UserListSerializer(serializers.ModelSerializer):
             is_read=False
         ).count()
 
+    def get_last_message(self, obj):
+        request = self.context["request"]
+
+        chat = Chat.objects.filter(
+           user1=request.user,
+           user2=obj
+       ).first()
+
+        if not chat:
+            chat = Chat.objects.filter(
+            user1=obj,
+            user2=request.user
+        ).first()
+
+        if not chat:
+            return None
+
+        last_message = Message.objects.filter(
+        chat=chat
+    ).order_by("-created_at").first()
+
+        if not last_message:
+            return None
+
+        return last_message.message
 
 
 class ChatSerializer(serializers.ModelSerializer):
