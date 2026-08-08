@@ -17,20 +17,43 @@ console.log("Current User ID:", userId);
   // NEW
   const [selectedUser, setSelectedUser] = useState(null);
 useEffect(() => {
-    if (!token) return;
+    if (!token) {
+        console.log("❌ No token found");
+        return;
+    }
+
+    console.log("✅ Token exists:", token);
 
     axios.get(
         "http://127.0.0.1:8000/api/auth/users/",
         {
             headers: {
-                Authorization: `Bearer ${token}`
-            }
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+            },
         }
-    ).then((res)=>{
+    )
+    .then((res) => {
+        console.log("✅ Users API response:", res.data);
         setUsers(res.data);
+    })
+    .catch((err) => {
+        console.log("❌ Users API error");
+        console.log("Status:", err.response?.status);
+        console.log("Data:", err.response?.data);
     });
 
 }, [token]);
+
+useEffect(() => {
+    if (!chatId) return;
+
+    console.log("Loading previous messages for chat:", chatId);
+
+    loadMessages(chatId);
+}, [chatId]);
+
+
 useEffect(() => {
     if (!chatId) return;
 
@@ -67,6 +90,38 @@ useEffect(() => {
         ws.close();
     };
 }, [chatId, userId]);
+
+useEffect(() => {
+    if (!userId) return;
+
+    const notificationSocket = new WebSocket(
+        `ws://127.0.0.1:8000/ws/notifications/${userId}/`
+    );
+
+    notificationSocket.onopen = () => {
+        console.log("🔔 Notification WebSocket Connected");
+    };
+
+    notificationSocket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        console.log("🔔 New Notification:", data);
+
+        alert(`New message from ${data.sender_name}: ${data.message}`);
+    };
+
+    notificationSocket.onerror = (error) => {
+        console.log("Notification WebSocket Error:", error);
+    };
+
+    notificationSocket.onclose = () => {
+        console.log("Notification WebSocket Closed");
+    };
+
+    return () => {
+        notificationSocket.close();
+    };
+}, [userId]);
 
   console.log(localStorage.getItem("access"));
 const createOrGetChat = async (receiverId) => {

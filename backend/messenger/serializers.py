@@ -31,11 +31,28 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 
+
 class UserListSerializer(serializers.ModelSerializer):
+
+    unread_count = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["id", "username"]
+        fields = ["id", "username", "unread_count"]
+
+    def get_unread_count(self, obj):
+        request = self.context["request"]
+
+        return Message.objects.filter(
+            sender=obj,
+            chat__in=Chat.objects.filter(
+                user1=request.user
+            ) | Chat.objects.filter(
+                user2=request.user
+            ),
+            is_read=False
+        ).count()
+
 
 
 class ChatSerializer(serializers.ModelSerializer):

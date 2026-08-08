@@ -63,7 +63,6 @@ class LoginAPI(APIView):
             status=status.HTTP_200_OK,
         )
 
-    
 class UserListAPI(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -73,9 +72,14 @@ class UserListAPI(APIView):
             is_staff=False,
         ).exclude(id=request.user.id)
 
-        serializer = UserListSerializer(users, many=True)
-        return Response(serializer.data)
+        serializer = UserListSerializer(
+            users,
+            many=True,
+            context={"request": request}
+        )
 
+        return Response(serializer.data)
+    
 
 class ChatViewSet(viewsets.ModelViewSet):
 

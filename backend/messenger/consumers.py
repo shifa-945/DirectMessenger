@@ -79,10 +79,27 @@ class ChatConsumer(AsyncWebsocketConsumer):
             }
         )
 
+        chat = await self.get_chat(self.chat_id)
+
+        if chat.user1_id == user.id:
+            receiver_id = chat.user2_id
+        else:
+            receiver_id = chat.user1_id
+
+        await self.channel_layer.group_send(
+            f"user_{receiver_id}",
+            {
+                "type": "new_notification",
+                "sender": user.id,
+                "sender_name": user.username,
+                "message": message.message,
+                "chat_id": int(self.chat_id),
+            }
+        )
+
     async def chat_message(self, event):
 
         await self.send(
-
             text_data=json.dumps({
 
                 "message": event["message"],
@@ -90,7 +107,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 "sender_name": event["sender_name"]
 
             })
-
         )
 
     @database_sync_to_async
@@ -106,3 +122,47 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
 
         return message
+
+    @database_sync_to_async
+    def get_chat(self, chat_id):
+        return Chat.objects.get(id=chat_id)
+
+
+class NotificationConsumer(AsyncWebsocketConsumer):
+
+    async def connect(self):
+
+        self.user_id = self.scope["url_route"]["kwargs"]["user_id"]
+
+        self.notification_group_name = f"user_{self.user_id}"
+
+        await self.channel_layer.group_add(
+            self.notification_group_name,
+            self.channel_name
+        )
+
+        await self.accept()
+
+        print("Notification connected:", self.notification_group_name)
+
+    async def disconnect(self, close_code):
+
+        await self.channel_layer.group_discard(
+            self.notification_group_name,
+            self.channel_name
+        )
+
+        print("Notification disconnected")
+
+    async def new_notification(self, event):
+
+        await self.send(
+            text_data=json.dumps({
+                "type": "new_message",
+                "sender": event["sender"],
+                "sender_name": event["sender_name"],
+                "message": event["message"],
+                "chat_id": event["chat_id"],
+            })
+        )
+
