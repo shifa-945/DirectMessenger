@@ -24,7 +24,9 @@ function Home() {
     const [typingUser, setTypingUser] = useState("");
     const [typingUsers, setTypingUsers] = useState({});
     const [notification, setNotification] = useState(null);
+    const [isSending, setIsSending] = useState(false);
     const selectedUserRef = useRef(null);
+    const messagesEndRef = useRef(null);
     selectedUserRef.current = selectedUser;
 
     useEffect(() => {
@@ -252,65 +254,77 @@ function Home() {
     }
 };
 
-    const sendMessage = () => {
-        console.log("Button clicked");
+  
+const sendMessage = () => {
+    console.log("Button clicked");
 
-        if (!socket) {
-            console.log("Socket is null");
-            return;
-        }
+    if (isSending) return;
 
-        console.log("Socket state:", socket.readyState);
+    if (!message.trim()) {
+        return;
+    }
 
-        if (socket.readyState !== WebSocket.OPEN) {
-            console.log("Socket is not open");
-            return;
-        }
+    if (!socket) {
+        console.log("Socket is null");
+        return;
+    }
 
-        // Stop typing indicator
-        socket.send(
-            JSON.stringify({
-                type: "typing",
-                is_typing: false,
-            })
+    console.log("Socket state:", socket.readyState);
+
+    if (socket.readyState !== WebSocket.OPEN) {
+        console.log("Socket is not open");
+        return;
+    }
+
+    setIsSending(true);
+
+    // Stop typing indicator
+    socket.send(
+        JSON.stringify({
+            type: "typing",
+            is_typing: false,
+        })
+    );
+
+    console.log("Sending:", message);
+
+    socket.send(
+        JSON.stringify({
+            message: message,
+        })
+    );
+
+    // Move the selected person to the top
+    setUsers((prevUsers) => {
+        const updatedUsers = prevUsers.map((user) =>
+            user.id === selectedUser?.id
+                ? {
+                      ...user,
+                      last_message: message,
+                  }
+                : user
         );
 
-        console.log("Sending:", message);
-
-        socket.send(
-            JSON.stringify({
-                message: message,
-            })
+        const selected = updatedUsers.find(
+            (user) => user.id === selectedUser?.id
         );
 
-        // Move the selected person to the top
-        setUsers((prevUsers) => {
-            const updatedUsers = prevUsers.map((user) =>
-                user.id === selectedUser?.id
-                    ? {
-                          ...user,
-                          last_message: message,
-                      }
-                    : user
-            );
+        const otherUsers = updatedUsers.filter(
+            (user) => user.id !== selectedUser?.id
+        );
 
-            const selected = updatedUsers.find(
-                (user) => user.id === selectedUser?.id
-            );
+        if (selected) {
+            return [selected, ...otherUsers];
+        }
 
-            const otherUsers = updatedUsers.filter(
-                (user) => user.id !== selectedUser?.id
-            );
+        return updatedUsers;
+    });
 
-            if (selected) {
-                return [selected, ...otherUsers];
-            }
+    setMessage("");
+    setIsSending(false);
+};
 
-            return updatedUsers;
-        });
 
-        setMessage("");
-    };
 
     const loadMessages = async (chatId) => {
         try {
@@ -330,6 +344,13 @@ function Home() {
             console.log(err);
         }
     };
+
+
+    useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+    });
+}, [messages]);
 
     return (
         <div className="flex h-screen overflow-hidden">
@@ -501,6 +522,7 @@ function Home() {
                             );
                         })
                     )}
+                    <div ref={messagesEndRef} />
 
                 </div>
 
@@ -533,10 +555,10 @@ function Home() {
 
                     <button
                         onClick={sendMessage}
-                        disabled={!selectedUser}
+                        disabled={!selectedUser || !message.trim() || isSending}
                         className="bg-indigo-600 text-white px-6 rounded-lg disabled:bg-gray-400"
                     >
-                        Send
+                        {isSending ? "Sending..." : "Send"}
                     </button>
 
                 </div>
