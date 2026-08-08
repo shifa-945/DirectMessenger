@@ -16,6 +16,8 @@ console.log("Current User ID:", userId);
   const [socket, setSocket] = useState(null);
   // NEW
   const [selectedUser, setSelectedUser] = useState(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const [typingUser, setTypingUser] = useState("");
 useEffect(() => {
     if (!token) {
         console.log("❌ No token found");
@@ -67,16 +69,28 @@ useEffect(() => {
     };
 
     ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+    const data = JSON.parse(event.data);
 
-        setMessages((prev) => [
-            ...prev,
-            {
-                message: data.message,
-                sender: data.sender,
-            },
-        ]);
-    };
+    // TYPING STATUS
+    if (data.type === "typing") {
+
+        if (Number(data.sender) !== userId) {
+            setIsTyping(data.is_typing);
+            setTypingUser(data.sender_name);
+        }
+
+        return;
+    }
+
+    // EXISTING MESSAGE CODE
+    setMessages((prev) => [
+        ...prev,
+        {
+            message: data.message,
+            sender: data.sender,
+        },
+    ]);
+};
 
     ws.onerror = (e) => {
         console.log("WebSocket Error", e);
@@ -149,7 +163,6 @@ const createOrGetChat = async (receiverId) => {
         console.log(err);
     }
 };
-
 const sendMessage = () => {
     console.log("Button clicked");
 
@@ -165,9 +178,16 @@ const sendMessage = () => {
         return;
     }
 
+    // Stop typing indicator
+    socket.send(
+        JSON.stringify({
+            type: "typing",
+            is_typing: false
+        })
+    );
+
     console.log("Sending:", message);
-    console.log("Socket:", socket);
-    console.log("Ready State:", socket?.readyState);
+
     socket.send(
         JSON.stringify({
             message: message
@@ -176,7 +196,6 @@ const sendMessage = () => {
 
     setMessage("");
 };
-
 const loadMessages = async (chatId) => {
 
     try {
@@ -273,10 +292,18 @@ const loadMessages = async (chatId) => {
           </h2>
 
           <p className="text-green-500 text-sm">
-            {selectedUser ? "Online" : ""}
-          </p>
+    {selectedUser ? "Online" : ""}
+</p>
 
-        </div>
+{isTyping && (
+    <p className="text-gray-500 text-sm">
+        {typingUser} is typing...
+    </p>
+)}
+
+</div>
+
+{/* Messages */}
 
         {/* Messages */}
 
@@ -348,7 +375,18 @@ const loadMessages = async (chatId) => {
           <input
             type="text"
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
+           onChange={(e) => {
+    setMessage(e.target.value);
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(
+            JSON.stringify({
+                type: "typing",
+                is_typing: e.target.value.length > 0
+            })
+        );
+    }
+}}
             placeholder="Type a message..."
             className="flex-1 border rounded-lg p-3"
             disabled={!selectedUser}

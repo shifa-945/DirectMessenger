@@ -48,18 +48,45 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         print("JSON:", data)
 
-        message_text = data["message"]
+        query_params = parse_qs(
+            self.scope["query_string"].decode()
+        )
 
-        print("Message:", message_text)
-
-        query_params = parse_qs(self.scope["query_string"].decode())
         user_id = query_params.get("user_id", [None])[0]
 
         print("User ID:", user_id)
 
-        user = await database_sync_to_async(User.objects.get)(id=user_id)
+        user = await database_sync_to_async(
+            User.objects.get
+        )(id=user_id)
 
         print("User:", user)
+
+        # =========================
+        # TYPING STATUS
+        # =========================
+
+        if data.get("type") == "typing":
+
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    "type": "typing_status",
+                    "sender": user.id,
+                    "sender_name": user.username,
+                    "is_typing": data.get("is_typing", False),
+                }
+            )
+
+            return
+
+        # =========================
+        # NORMAL MESSAGE
+        # =========================
+
+        message_text = data["message"]
+
+        print("Message:", message_text)
 
         message = await self.save_message(
             user,
@@ -79,6 +106,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
             }
         )
 
+        # =========================
+        # NOTIFICATION
+        # =========================
+
         chat = await self.get_chat(self.chat_id)
 
         if chat.user1_id == user.id:
@@ -97,20 +128,42 @@ class ChatConsumer(AsyncWebsocketConsumer):
             }
         )
 
+    # =========================
+    # CHAT MESSAGE
+    # =========================
+
     async def chat_message(self, event):
 
         await self.send(
             text_data=json.dumps({
-
                 "message": event["message"],
                 "sender": event["sender"],
                 "sender_name": event["sender_name"]
-
             })
         )
 
+    # =========================
+    # TYPING STATUS
+    # =========================
+
+    async def typing_status(self, event):
+
+        await self.send(
+            text_data=json.dumps({
+                "type": "typing",
+                "sender": event["sender"],
+                "sender_name": event["sender_name"],
+                "is_typing": event["is_typing"],
+            })
+        )
+
+    # =========================
+    # SAVE MESSAGE
+    # =========================
+
     @database_sync_to_async
     def save_message(self, user, chat_id, text):
+
         print("save_message() called")
 
         chat = Chat.objects.get(id=chat_id)
@@ -123,8 +176,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         return message
 
+    # =========================
+    # GET CHAT
+    # =========================
+
     @database_sync_to_async
     def get_chat(self, chat_id):
+
         return Chat.objects.get(id=chat_id)
 
 
@@ -143,7 +201,10 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
         await self.accept()
 
-        print("Notification connected:", self.notification_group_name)
+        print(
+            "Notification connected:",
+            self.notification_group_name
+        )
 
     async def disconnect(self, close_code):
 
