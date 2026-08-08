@@ -1,13 +1,13 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import  Chat, Message
+from .models import Chat, Message
+
 
 class RegisterSerializer(serializers.ModelSerializer):
 
     password = serializers.CharField(
         write_only=True
     )
-
 
     class Meta:
         model = User
@@ -17,7 +17,6 @@ class RegisterSerializer(serializers.ModelSerializer):
             "email",
             "password"
         ]
-
 
     def create(self, validated_data):
 
@@ -47,13 +46,23 @@ class UserListSerializer(serializers.ModelSerializer):
     def get_unread_count(self, obj):
         request = self.context["request"]
 
-        return Message.objects.filter(
-            sender=obj,
-            chat__in=Chat.objects.filter(
-                user1=request.user
-            ) | Chat.objects.filter(
+        chat = Chat.objects.filter(
+            user1=request.user,
+            user2=obj
+        ).first()
+
+        if not chat:
+            chat = Chat.objects.filter(
+                user1=obj,
                 user2=request.user
-            ),
+            ).first()
+
+        if not chat:
+            return 0
+
+        return Message.objects.filter(
+            chat=chat,
+            sender=obj,
             is_read=False
         ).count()
 
@@ -61,22 +70,22 @@ class UserListSerializer(serializers.ModelSerializer):
         request = self.context["request"]
 
         chat = Chat.objects.filter(
-           user1=request.user,
-           user2=obj
-       ).first()
+            user1=request.user,
+            user2=obj
+        ).first()
 
         if not chat:
             chat = Chat.objects.filter(
-            user1=obj,
-            user2=request.user
-        ).first()
+                user1=obj,
+                user2=request.user
+            ).first()
 
         if not chat:
             return None
 
         last_message = Message.objects.filter(
-        chat=chat
-    ).order_by("-created_at").first()
+            chat=chat
+        ).order_by("-created_at").first()
 
         if not last_message:
             return None
@@ -114,9 +123,8 @@ class ChatSerializer(serializers.ModelSerializer):
         ]
 
 
-
-
 class MessageSerializer(serializers.ModelSerializer):
+
     sender_name = serializers.CharField(
         source="sender.username",
         read_only=True

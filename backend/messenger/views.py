@@ -4,8 +4,8 @@ from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from django.contrib.auth.models import User
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from .serializers import (
     RegisterSerializer,
@@ -29,7 +29,12 @@ class RegisterAPI(APIView):
                 status=status.HTTP_201_CREATED,
             )
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
 class LoginAPI(APIView):
     permission_classes = [AllowAny]
 
@@ -63,6 +68,7 @@ class LoginAPI(APIView):
             status=status.HTTP_200_OK,
         )
 
+
 class UserListAPI(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -79,7 +85,7 @@ class UserListAPI(APIView):
         )
 
         return Response(serializer.data)
-    
+
 
 class ChatViewSet(viewsets.ModelViewSet):
 
@@ -95,7 +101,6 @@ class ChatViewSet(viewsets.ModelViewSet):
         ) | Chat.objects.filter(
             user2=user
         )
-
 
     def create(self, request, *args, **kwargs):
 
@@ -125,11 +130,14 @@ class ChatViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.data)
 
+
 class MessageViewSet(viewsets.ModelViewSet):
+
     queryset = Message.objects.all()
     serializer_class = MessageSerializer
 
     def get_queryset(self):
+
         queryset = Message.objects.all().order_by("created_at")
 
         chat = self.request.query_params.get("chat")
@@ -140,4 +148,56 @@ class MessageViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(sender=self.request.user)
+
+        serializer.save(
+            sender=self.request.user
+        )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="mark-read"
+    )
+    def mark_read(self, request):
+
+        chat_id = request.data.get("chat_id")
+
+        if not chat_id:
+            return Response(
+                {"error": "chat_id is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            chat = Chat.objects.get(id=chat_id)
+        except Chat.DoesNotExist:
+            return Response(
+                {"error": "Chat not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if (
+            chat.user1_id != request.user.id
+            and chat.user2_id != request.user.id
+        ):
+            return Response(
+                {"error": "You are not a member of this chat"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        updated_count = Message.objects.filter(
+            chat=chat,
+            is_read=False
+        ).exclude(
+            sender=request.user
+        ).update(
+            is_read=True
+        )
+
+        return Response(
+            {
+                "message": "Messages marked as read",
+                "updated_count": updated_count
+            },
+            status=status.HTTP_200_OK
+        )

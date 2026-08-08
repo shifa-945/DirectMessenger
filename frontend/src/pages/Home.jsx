@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect,useRef  } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 
@@ -19,10 +19,13 @@ function Home() {
 
     // NEW
     const [selectedUser, setSelectedUser] = useState(null);
+    
     const [isTyping, setIsTyping] = useState(false);
     const [typingUser, setTypingUser] = useState("");
     const [typingUsers, setTypingUsers] = useState({});
     const [notification, setNotification] = useState(null);
+    const selectedUserRef = useRef(null);
+    selectedUserRef.current = selectedUser;
 
     useEffect(() => {
         if (!token) {
@@ -131,41 +134,45 @@ function Home() {
                 return;
             }
 
-          if (data.type === "new_message") {
-    setNotification({
-        sender_name: data.sender_name,
-        message: data.message,
-    });
+            if (data.type === "new_message") {
+                setNotification({
+                    sender_name: data.sender_name,
+                    message: data.message,
+                });
 
-    setUsers((prevUsers) => {
-    const updatedUsers = prevUsers.map((user) =>
-        user.id === selectedUser?.id
-            ? {
-                  ...user,
-                  last_message: message,
-              }
-            : user
-    );
+                setUsers((prevUsers) => {
+                    const updatedUsers = prevUsers.map((user) =>
+                        user.id === Number(data.sender)
+                            ? {
+                                  ...user,
+                                  last_message: data.message,
+                                  unread_count:
+    user.id === Number(selectedUserRef.current?.id)
+        ? 0
+        : (user.unread_count || 0) + 1,
+                              }
+                            : user
+                    );
 
-    const selected = updatedUsers.find(
-        (user) => user.id === selectedUser?.id
-    );
+                    const sender = updatedUsers.find(
+                        (user) => user.id === Number(data.sender)
+                    );
 
-    const otherUsers = updatedUsers.filter(
-        (user) => user.id !== selectedUser?.id
-    );
+                    const otherUsers = updatedUsers.filter(
+                        (user) => user.id !== Number(data.sender)
+                    );
 
-    if (selected) {
-        return [selected, ...otherUsers];
-    }
+                    if (sender) {
+                        return [sender, ...otherUsers];
+                    }
 
-    return updatedUsers;
-});
+                    return updatedUsers;
+                });
 
-    setTimeout(() => {
-        setNotification(null);
-    }, 3000);
-}
+                setTimeout(() => {
+                    setNotification(null);
+                }, 3000);
+            }
         };
 
         notificationSocket.onerror = (error) => {
@@ -200,6 +207,7 @@ function Home() {
             console.log("Chat API Response:", res.data);
 
             setChatId(res.data.id);
+            return res.data;
         } catch (err) {
             console.log("Status:", err.response?.status);
             console.log(
@@ -210,65 +218,99 @@ function Home() {
         }
     };
 
+    const markMessagesAsRead = async (chatId, selectedUserId) => {
+    try {
+        await axios.post(
+            "http://127.0.0.1:8000/api/auth/messages/mark-read/",
+            {
+                chat_id: chatId,
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            }
+        );
+
+        console.log("Messages marked as read");
+
+        setUsers((prevUsers) =>
+            prevUsers.map((user) =>
+                user.id === selectedUserId
+                    ? {
+                          ...user,
+                          unread_count: 0,
+                      }
+                    : user
+            )
+        );
+    } catch (err) {
+        console.log(
+            "Mark read error:",
+            err.response?.data || err
+        );
+    }
+};
+
     const sendMessage = () => {
-    console.log("Button clicked");
+        console.log("Button clicked");
 
-    if (!socket) {
-        console.log("Socket is null");
-        return;
-    }
-
-    console.log("Socket state:", socket.readyState);
-
-    if (socket.readyState !== WebSocket.OPEN) {
-        console.log("Socket is not open");
-        return;
-    }
-
-    // Stop typing indicator
-    socket.send(
-        JSON.stringify({
-            type: "typing",
-            is_typing: false,
-        })
-    );
-
-    console.log("Sending:", message);
-
-    socket.send(
-        JSON.stringify({
-            message: message,
-        })
-    );
-
-    // Move the selected person to the top
-    setUsers((prevUsers) => {
-        const updatedUsers = prevUsers.map((user) =>
-            user.id === selectedUser?.id
-                ? {
-                      ...user,
-                      last_message: message,
-                  }
-                : user
-        );
-
-        const selected = updatedUsers.find(
-            (user) => user.id === selectedUser?.id
-        );
-
-        const otherUsers = updatedUsers.filter(
-            (user) => user.id !== selectedUser?.id
-        );
-
-        if (selected) {
-            return [selected, ...otherUsers];
+        if (!socket) {
+            console.log("Socket is null");
+            return;
         }
 
-        return updatedUsers;
-    });
+        console.log("Socket state:", socket.readyState);
 
-    setMessage("");
-};
+        if (socket.readyState !== WebSocket.OPEN) {
+            console.log("Socket is not open");
+            return;
+        }
+
+        // Stop typing indicator
+        socket.send(
+            JSON.stringify({
+                type: "typing",
+                is_typing: false,
+            })
+        );
+
+        console.log("Sending:", message);
+
+        socket.send(
+            JSON.stringify({
+                message: message,
+            })
+        );
+
+        // Move the selected person to the top
+        setUsers((prevUsers) => {
+            const updatedUsers = prevUsers.map((user) =>
+                user.id === selectedUser?.id
+                    ? {
+                          ...user,
+                          last_message: message,
+                      }
+                    : user
+            );
+
+            const selected = updatedUsers.find(
+                (user) => user.id === selectedUser?.id
+            );
+
+            const otherUsers = updatedUsers.filter(
+                (user) => user.id !== selectedUser?.id
+            );
+
+            if (selected) {
+                return [selected, ...otherUsers];
+            }
+
+            return updatedUsers;
+        });
+
+        setMessage("");
+    };
 
     const loadMessages = async (chatId) => {
         try {
@@ -339,9 +381,17 @@ function Home() {
                 {users.map((user) => (
                     <div
                         key={user.id}
-                        onClick={() => {
+                        onClick={async () => {
                             setSelectedUser(user);
-                            createOrGetChat(user.id);
+
+                            const chat = await createOrGetChat(user.id);
+
+                            if (chat) {
+                                await markMessagesAsRead(
+                                    chat.id,
+                                    user.id
+                                );
+                            }
                         }}
                         className={`p-3 rounded-lg cursor-pointer mb-2 ${
                             selectedUser?.id === user.id
@@ -349,9 +399,17 @@ function Home() {
                                 : "hover:bg-gray-100"
                         }`}
                     >
-                        <p className="font-medium">
-                            {user.username}
-                        </p>
+                        <div className="flex justify-between items-center">
+                            <p className="font-medium">
+                                {user.username}
+                            </p>
+
+                            {user.unread_count > 0 && (
+                                <span className="bg-green-500 text-white text-xs font-bold rounded-full min-w-[22px] h-[22px] flex items-center justify-center px-1">
+                                    {user.unread_count}
+                                </span>
+                            )}
+                        </div>
 
                         {typingUsers[user.id] ? (
                             <p className="text-sm text-green-500">
